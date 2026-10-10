@@ -11,12 +11,13 @@ const TURN = { answer: 'done', durationMs: 1000, isAborted: false, turnId: 't1',
 
 // The world beneath the plugin: a context window at `percent`, a compaction
 // that records what it was told, and Bash calls that succeed.
-function world(on: On, percent: number, dialog = false) {
+function world(on: On, percent: number, dialog = false, headless = false) {
   const compactions: (string | undefined)[] = []
   on('session.usage', () => ({
     value: { startedAt: 0, context: { tokens: percent * 2000, window: 200_000, percent }, rateLimits: [] },
   }) as never)
   on('session.compact', (_$, e) => {
+    if (headless) throw new Error('not available in a headless (-p / SDK) session yet')
     compactions.push(e.instructions)
     return { messages: [{ role: 'user', text: 'summary', toolUses: [] }] }
   })
@@ -107,6 +108,24 @@ describe('dialog', () => {
     expect((await dialog.find({ key: 'dismiss' })) !== undefined).toBe(true)
     await dialog.press({ key: 'compact' })
     expect(compactions).toEqual(['keep TODOs'])
+  })
+})
+
+describe('headless', () => {
+  test('falls back to a queued /compact where session.compact is not available', async ($, on) => {
+    world(on, 70, true, true)
+    const commands: string[] = []
+    on('command.run', (_$, e) => {
+      commands.push(`/${e.command} ${e.args}`)
+      return { text: 'compacted' }
+    })
+    await start($)
+    await $.tool.call({ tool: TOOL, reason: 'shipped', instructions: 'keep TODOs' } as never)
+    await $.turn.complete(TURN)
+
+    const dialog = await $.ui.mount({ plugin: 'smart-compact', surface: 'desktop', component: 'Pane', requestId: 'smart-compact', props: {} } as never)
+    await dialog.press({ key: 'compact' })
+    expect(commands).toEqual(['/compact keep TODOs'])
   })
 })
 

@@ -47,8 +47,18 @@ async function compact($: Engine, instructions?: string) {
   try {
     const done = await $.session.compact(instructions ? { instructions } : undefined)
     if (done.skip !== undefined) $.ui.toast(`smart-compact: skipped (${done.skip})`)
+  } catch {
+    await compactAsCommand($, instructions)
+  }
+}
+
+// A headless session (the desktop app's Code tab, the SDK) compacts only inside
+// a turn, so it gets the person's own /compact, queued until the session is idle.
+async function compactAsCommand($: Engine, instructions?: string) {
+  try {
+    await $.command.run({ command: 'compact', args: instructions ?? '' })
   } catch (error) {
-    $.ui.toast(`smart-compact: could not compact (${String(error)})`)
+    $.ui.toast(`smart-compact: could not compact, type /compact (${String(error)})`)
   }
 }
 
@@ -62,7 +72,7 @@ function offer($: Engine, e: ResolveInput, current: Suggestion) {
         <Text bold>{lead}</Text>
         <Text dimColor>
           {' '}
-          · {current.reason} · context {current.percent}%
+          ï¿½ {current.reason} ï¿½ context {current.percent}%
         </Text>
       </Text>
       <Button
