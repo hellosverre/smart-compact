@@ -1,0 +1,15 @@
+{
+  "name": "smart-compact",
+  "description": "Smart compaction for Claude Code",
+  "owner": {
+    "name": "hellosverre",
+    "url": "https://github.com/hellosverre"
+  },
+  "plugins": [
+    {
+      "name": "smart-compact",
+      "source": "./",
+      "description": "Compacts after a commit or green tests, before the prompt cache expires, or when Claude asks for it"
+    }
+  ]
+}

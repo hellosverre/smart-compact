@@ -1,0 +1,52 @@
+{
+  "name": "smart-compact",
+  "version": "0.1.0",
+  "description": "Compacts at the right moment: after a commit or green tests, a minute before the prompt cache expires, or when Claude asks for it with its own request_compact tool.",
+  "author": {
+    "name": "hellosverre",
+    "url": "https://github.com/hellosverre"
+  },
+  "homepage": "https://github.com/hellosverre/smart-compact",
+  "repository": "https://github.com/hellosverre/smart-compact",
+  "license": "MIT",
+  "keywords": [
+    "claude-code-mods",
+    "claude-mods",
+    "function-hooks",
+    "compact",
+    "context",
+    "prompt-cache",
+    "tokens"
+  ],
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "onRequest": {
+      "type": "string",
+      "title": "When Claude asks to compact",
+      "description": "ask: show a one-click band. auto: compact as soon as the turn ends.",
+      "options": [
+        "ask",
+        "auto"
+      ],
+      "default": "ask"
+    },
+    "minPercent": {
+      "type": "number",
+      "title": "Minimum context fill (%)",
+      "description": "Below this, no suggestion is made and Claude's requests are turned down.",
+      "default": 40
+    },
+    "cacheTtlMinutes": {
+      "type": "number",
+      "title": "Prompt cache lifetime (minutes)",
+      "description": "5 for the API default, 60 if your plan uses the 1-hour cache.",
+      "default": 5
+    },
+    "idleCompact": {
+      "type": "boolean",
+      "title": "Compact while idle, before the cache expires",
+      "description": "Off: only suggest it. On: compact one minute before expiry while the summary still reads from cache.",
+      "default": false
+    }
+  }
+}
