@@ -127,5 +127,6 @@ claude plugin validate .
 
 - [skins](https://github.com/hellosverre/claude-skins): tool rows with icons, diff and chart cards, fifteen themes
 - [redgreen](https://github.com/hellosverre/redgreen): test results in a pane beside the chat
+- [mod-store](https://github.com/hellosverre/mod-store): browse, search and install 2,700 mods from a pane
 
 MIT licensed.
