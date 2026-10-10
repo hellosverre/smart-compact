@@ -3,6 +3,8 @@ export type Suggestion = {
   reason: string
   instructions?: string
   percent: number
+  // True once the dialog above the prompt holds it; the band stands in otherwise.
+  inDialog?: boolean
 }
 
 declare module 'claude-code' {

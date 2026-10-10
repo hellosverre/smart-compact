@@ -1,5 +1,5 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface as Engine, Register, Timer } from 'claude-code'
+import type { EngineInterface as Engine, Register, ResolveInput, Timer } from 'claude-code'
 
 import type { Suggestion } from '../types'
 import { boundaryOf, cacheWarningDelayMs, formatTokens } from './signals'
@@ -7,6 +7,7 @@ import type { Boundary } from './signals'
 
 const TOOL = 'request_compact'
 const TOOL_ID = 'mcp__smart-compact__request_compact'
+const DIALOG = 'smart-compact'
 
 const suggestion = atom({ plugin: 'smart-compact', key: 'suggestion' } as const, null)
 
@@ -26,18 +27,55 @@ async function percentNow($: Engine) {
   return { percent: context.percent ?? 0, tokens: context.tokens }
 }
 
+// Offers it in a small dialog that takes the keyboard (arrows pick, Enter
+// confirms, Esc hands the keys back). Where the surface will not place one, the
+// band above the prompt carries the same buttons.
 async function suggest($: Engine, next: Suggestion) {
   await update($, suggestion, () => next)
+  const opened = await $.ui.open({ id: DIALOG, title: 'smart-compact', focus: true, closeOnEscape: true, rows: 1 })
+  if (opened.isPlaced) await update($, suggestion, s => (s === null ? s : { ...s, inDialog: true }))
+}
+
+async function dismiss($: Engine) {
+  await update($, suggestion, () => null)
+  // A dialog that will not close must not stand between the person and the compact.
+  await $.ui.close({ id: DIALOG }).catch((error: unknown) => $.ui.toast(`smart-compact: ${String(error)}`))
 }
 
 async function compact($: Engine, instructions?: string) {
-  await update($, suggestion, () => null)
+  await dismiss($)
   try {
     const done = await $.session.compact(instructions ? { instructions } : undefined)
     if (done.skip !== undefined) $.ui.toast(`smart-compact: skipped (${done.skip})`)
   } catch (error) {
     $.ui.toast(`smart-compact: could not compact (${String(error)})`)
   }
+}
+
+function offer($: Engine, e: ResolveInput, current: Suggestion) {
+  const { Box, Button, Text } = $.ui.resolve(e)
+  const lead = current.source === 'claude' ? 'Claude wants to compact' : 'Good moment to compact'
+
+  return (
+    <Box key="smart-compact" flexDirection="row" gap={1}>
+      <Text>
+        <Text bold>{lead}</Text>
+        <Text dimColor>
+          {' '}
+          · {current.reason} · context {current.percent}%
+        </Text>
+      </Text>
+      <Button
+        key="compact"
+        label="Compact now"
+        hotkey="c"
+        variant="primary"
+        autoFocus
+        onPress={() => compact($, current.instructions)}
+      />
+      <Button key="dismiss" label="Not now" hotkey="n" onPress={() => dismiss($)} />
+    </Box>
+  )
 }
 
 export const register: Register = (on, options) => {
@@ -121,7 +159,7 @@ export const register: Register = (on, options) => {
     cacheTimer = null
     boundary = null
     requested = null
-    await update($, suggestion, () => null)
+    await dismiss($)
     return next(e)
   }).catch(($, e, next) => next(e))
 
@@ -168,30 +206,21 @@ export const register: Register = (on, options) => {
     return done
   })
 
+  // Esc on the dialog means not now.
+  on('ui.close', { id: DIALOG }, async ($, e, next) => {
+    await update($, suggestion, () => null)
+    return next(e)
+  }).catch(($, e, next) => next(e))
+
+  on('ui.render', { component: 'Pane', requestId: DIALOG }, async ($, e, next) => {
+    const current = await read($, suggestion)
+    if (current === null) return next(e)
+    return offer($, e, current)
+  })
+
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const current = await read($, suggestion)
-    if (current === null || e.props.hasSurvey) return next(e)
-
-    const { Box, Button, Text } = $.ui.resolve(e)
-    const lead = current.source === 'claude' ? 'Claude wants to compact' : 'Good moment to compact'
-
-    return (
-      <Box key="smart-compact" flexDirection="row" gap={1}>
-        <Text>
-          <Text bold>{lead}</Text>
-          <Text dimColor>
-            {' '}
-            Â· {current.reason} Â· context {current.percent}%
-          </Text>
-        </Text>
-        <Button
-          key="compact"
-          label="Compact now"
-          hotkey="c"
-          onPress={() => compact($, current.instructions)}
-        />
-        <Button key="dismiss" label="Not now" onPress={() => update($, suggestion, () => null)} />
-      </Box>
-    )
+    if (current === null || current.inDialog || e.props.hasSurvey) return next(e)
+    return offer($, e, current)
   })
 }

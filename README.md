@@ -54,7 +54,9 @@ claude plugin uninstall smart-compact@smart-compact
 | Tests go green | **Good moment to compact** · Tests just went green | Same, for vitest, jest, pytest, mocha, playwright, cargo, go, dotnet and `npm`/`pnpm`/`yarn`/`bun test` |
 | You have been idle almost 5 minutes | **Good moment to compact** · Prompt cache expires in ~1 min | See below |
 
-Press **Compact now** (or `c`) to compact, or **Not now** to dismiss. Sending a new prompt clears the band too.
+The offer opens as a small dialog above the prompt that already has the keyboard: ←/→ pick, Enter confirms
+(or `c` / `n`), Esc hands the keys back. Where the terminal is too narrow for it, the band carries the same buttons
+(click it or `ctrl+x tab` first). Sending a new prompt clears either.
 Nothing shows while the context is under the threshold, and nothing fires inside subagents.
 
 <img alt="The band after a few idle minutes: 'Good moment to compact · Prompt cache expires in ~1 min, then 144k tokens re-send at full price · context 72%'" src="docs/cache.png">

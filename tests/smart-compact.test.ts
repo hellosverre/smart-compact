@@ -11,7 +11,7 @@ const TURN = { answer: 'done', durationMs: 1000, isAborted: false, turnId: 't1',
 
 // The world beneath the plugin: a context window at `percent`, a compaction
 // that records what it was told, and Bash calls that succeed.
-function world(on: On, percent: number) {
+function world(on: On, percent: number, dialog = false) {
   const compactions: (string | undefined)[] = []
   on('session.usage', () => ({
     value: { startedAt: 0, context: { tokens: percent * 2000, window: 200_000, percent }, rateLimits: [] },
@@ -29,6 +29,9 @@ function world(on: On, percent: number) {
   on('prompt.submit', (_$, e) => e as never)
   on('ui.render', { component: 'AbovePrompt' }, () => ({ type: 'Box', children: [] }) as never)
   on('ui.toast', () => ({ value: undefined }) as never)
+  on('ui.open', () => ({ value: dialog ? { isPlaced: true } : { isPlaced: false, reason: 'narrow' } }) as never)
+  on('ui.close', () => ({ value: undefined }) as never)
+  on('ui.render', { component: 'Pane' }, () => ({ type: 'Box', children: [] }) as never)
   return compactions
 }
 
@@ -89,6 +92,21 @@ describe('request_compact', () => {
     expect(compactions).toEqual([])
     await clock.advance(500)
     expect(compactions).toEqual([undefined])
+  })
+})
+
+describe('dialog', () => {
+  test('opens a focused dialog with the buttons, and the band stays clear', async ($, on) => {
+    const compactions = world(on, 70, true)
+    await start($)
+    await $.tool.call({ tool: TOOL, reason: 'shipped', instructions: 'keep TODOs' } as never)
+    await $.turn.complete(TURN)
+
+    expect(await (await band($, 'terminal')).find({ key: 'compact' })).toBe(undefined)
+    const dialog = await $.ui.mount({ plugin: 'smart-compact', surface: 'terminal', component: 'Pane', requestId: 'smart-compact', props: {} } as never)
+    expect((await dialog.find({ key: 'dismiss' })) !== undefined).toBe(true)
+    await dialog.press({ key: 'compact' })
+    expect(compactions).toEqual(['keep TODOs'])
   })
 })
 
