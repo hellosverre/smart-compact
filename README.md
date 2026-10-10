@@ -13,7 +13,7 @@
 
 <p align="center">Auto-compact waits until the context is full, and that usually lands mid-task.<br>smart-compact offers it at the right moments: when work has just landed, before the prompt cache expires,<br>or when Claude itself says it is done with what came before.</p>
 
-<img alt="Claude runs the tests, commits, then calls request_compact with what the summary must keep; when the turn ends a band above the prompt reads 'Claude wants to compact · token refactor shipped · context 74%' with Compact now and Not now; one press and the conversation is compacted, context back to 9%" src="docs/demo.gif">
+<img alt="Claude runs the tests, commits, then calls request_compact with what the summary must keep; when the turn ends a dialog above the prompt reads 'Claude wants to compact · token refactor shipped · context 74%' with Compact now focused and Not now; Enter and the conversation is compacted, context back to 9%" src="docs/demo.gif">
 
 ## Install
 
@@ -47,7 +47,7 @@ claude plugin uninstall smart-compact@smart-compact
 
 ## When it speaks up
 
-| Moment | Band above the prompt | Why then |
+| Moment | The offer reads | Why then |
 |---|---|---|
 | Claude calls `request_compact` | **Claude wants to compact** · its reason | Claude knows when a task is finished better than a token counter does |
 | A `git commit` lands | **Good moment to compact** · You just committed | The work is saved; the turns that led to it are rarely needed verbatim |
@@ -59,7 +59,7 @@ The offer opens as a small dialog above the prompt that already has the keyboard
 (click it or `ctrl+x tab` first). Sending a new prompt clears either.
 Nothing shows while the context is under the threshold, and nothing fires inside subagents.
 
-<img alt="The band after a few idle minutes: 'Good moment to compact · Prompt cache expires in ~1 min, then 144k tokens re-send at full price · context 72%'" src="docs/cache.png">
+<img alt="The dialog after a few idle minutes: 'Good moment to compact · Prompt cache expires in ~1 min, then 144k tokens re-send at full price · context 72%'" src="docs/cache.png">
 
 ## Claude can ask for it
 
@@ -67,14 +67,14 @@ smart-compact gives Claude a tool, `request_compact`, with two fields:
 
 | Field | |
 |---|---|
-| `reason` | One line: why now is a good moment. Shown on the band. |
+| `reason` | One line: why now is a good moment. Shown in the offer. |
 | `instructions` | What the summary must keep: open TODOs, file paths, decisions. Passed to the compaction. |
 
 The tool's description tells Claude to call it at a natural boundary (a task finished and committed, a
 plan written down, a switch to an unrelated topic) and never mid-task. A request while the context is under
 the threshold is turned down with a note telling Claude to keep working, so it cannot compact a short session.
 
-By default a request only offers the band. Set `onRequest` to `auto` and it compacts as soon as the turn ends.
+By default a request only offers the compact. Set `onRequest` to `auto` and it compacts as soon as the turn ends.
 
 ## Why the cache matters
 
@@ -92,7 +92,7 @@ In the plugin's options under `/plugin`:
 
 | Setting | Default | |
 |---|---|---|
-| `onRequest` | `ask` | `ask`: show the band when Claude requests a compact. `auto`: compact as soon as the turn ends. |
+| `onRequest` | `ask` | `ask`: offer it when Claude requests a compact. `auto`: compact as soon as the turn ends. |
 | `minPercent` | `40` | Context fill below which nothing is suggested and Claude's requests are turned down |
 | `cacheTtlMinutes` | `5` | Set `60` if your plan uses the 1-hour cache |
 | `idleCompact` | `false` | Compact on its own a minute before the cache expires, instead of only suggesting it |
@@ -103,9 +103,11 @@ A Claude Code mod in two files ([hooks/register.tsx](hooks/register.tsx), [hooks
 
 - `tool.call` on Bash and PowerShell watches for a commit or a green test run
 - `turn.complete` decides whether to suggest, compacts on an `auto` request, and starts the cache timer
-- `prompt.submit` cancels the timer and clears the band
-- `$.tool.register` adds `request_compact`, and `$.session.compact` runs the compaction with Claude's instructions
-- a `ui.render` hook on `AbovePrompt` draws the band, in the terminal and the desktop app
+- `prompt.submit` cancels the timer and clears the offer
+- `$.tool.register` adds `request_compact`, and `$.session.compact` runs the compaction with Claude's instructions;
+  where that is not available (the desktop app's Code tab, the SDK) it queues your own `/compact <instructions>`
+- `$.ui.open` places the dialog, drawn by a `ui.render` hook on its `Pane`; a hook on `AbovePrompt` draws the band
+  where no dialog fits
 
 Compaction always waits for the turn to end; smart-compact never interrupts Claude mid-answer.
 

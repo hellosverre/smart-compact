@@ -1,6 +1,6 @@
-"""Draws docs/demo.gif and docs/cache.png: a Claude Code session with the smart-compact band.
+"""Draws docs/demo.gif and docs/cache.png: a Claude Code session with the smart-compact dialog.
 
-The band follows hooks/register.tsx (lead, reason, context, two buttons) and its texts are the
+The dialog follows hooks/register.tsx (lead, reason, context, two buttons) and its texts are the
 mod's own, so the demo cannot drift far from what the mod draws.
 Needs Pillow and ffmpeg. Run from the repo root: python scripts/demo.py
 """
@@ -58,17 +58,35 @@ def spans(d, x, y, parts):
     return x
 
 
-def button(d, x, y, label, pressed=False):
+def button(d, x, y, label, focused=False, pressed=False):
     text = f"[ {label} ]"
-    if pressed:
-        d.rectangle((x - 2, y - 1, x + len(text) * CW + 2, y + LH - 4), fill=PRESSED)
-    return draw_text(d, x, y, text, FG if pressed else DIM, pressed)
+    if focused:
+        d.rectangle((x - 2, y - 1, x + len(text) * CW + 2, y + LH - 4), fill=FAINT if pressed else PRESSED)
+    return draw_text(d, x, y, text, FG if focused else DIM, focused)
 
 
-# The band, as the ui.render hook on AbovePrompt lays it out: one row, gap 1.
-def band(d, x, y, lead, reason, percent, pressed):
-    x = spans(d, x, y, [(lead, FG, True), (f" · {reason} · context {percent}%", DIM, False)])
-    x = button(d, x + CW, y, "Compact now", pressed)
+def titled_box(d, top, bottom, title, hint):
+    d.rounded_rectangle((24, top, W - 24, bottom), radius=7, outline=FAINT)
+    d.rectangle((38, top - 2, 38 + (len(title) + 2) * CW, top + 2), fill=BG)
+    draw_text(d, 38 + CW, top - LH / 2 + 3, title, DIM)
+    left = W - 38 - (len(hint) + 2) * CW
+    d.rectangle((left, bottom - 2, W - 38, bottom + 2), fill=BG)
+    draw_text(d, left + CW, bottom - LH / 2 + 3, hint, FAINT)
+
+
+# The dialog, as the ui.render hook on the Pane lays it out: one row, gap 1, the
+# first button focused, the keys held until Enter or Esc.
+def dialog(d, lead, reason, percent, pressed):
+    text = [(lead, FG, True), (f" · {reason} · context {percent}%", DIM, False)]
+    buttons = len("[ Compact now ] [ Not now ]") + 1
+    wraps = 44 + (sum(len(t) for t, _, _ in text) + buttons) * CW > W - 44
+    extra = LH if wraps else 0
+    titled_box(d, H - 156 - extra, H - 106, "smart-compact", "←/→ pick · enter confirm · esc")
+    y = H - 142 - extra
+    x = spans(d, 44, y, text)
+    if wraps:
+        x, y = 44 - CW, y + LH
+    x = button(d, x + CW, y, "Compact now", focused=True, pressed=pressed)
     button(d, x + CW, y, "Not now")
 
 
@@ -86,7 +104,7 @@ def frame(state):
         y += LH
 
     if state.get("band"):
-        band(d, 28, H - 130, *state["band"], state.get("pressed", False))
+        dialog(d, *state["band"], state.get("pressed", False))
 
     d.rounded_rectangle((24, H - 92, W - 24, H - 50), radius=7, outline=FAINT)
     draw_text(d, 40, H - 82, "> " + state.get("typing", ""), FG)
