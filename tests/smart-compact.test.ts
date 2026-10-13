@@ -2,6 +2,7 @@ import { describe, expect, mock, test } from 'claude-code/testing'
 import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
+import { backupPlan, backupTitle } from '../hooks/backup'
 import { boundaryOf, cacheWarningDelayMs, formatTokens } from '../hooks/signals'
 
 const TOOL = 'mcp__smart-compact__request_compact'
@@ -187,5 +188,58 @@ describe('smart timing', () => {
     const ui = await band($, 'terminal')
     expect(await ui.find({ key: 'compact' })).toBe(undefined)
     expect(compactions).toEqual([])
+  })
+})
+
+describe('backup', () => {
+  const ID = '263bc84a-6364-40f8-8898-b4aacc857e80'
+  const NEW = '11111111-2222-3333-4444-555555555555'
+  const AT = new Date(2026, 9, 13, 9, 5)
+
+  test('copies beside the transcript under a new id, titled for /resume', () => {
+    const plan = backupPlan(`/home/a/.claude/projects/x/${ID}.jsonl`, ID, NEW, AT)
+    expect(plan.out).toBe(`/home/a/.claude/projects/x/${NEW}.jsonl`)
+    expect(plan.argv.slice(0, 2)).toEqual(['sh', '-c'])
+    expect(plan.env.SC_OLD).toBe(ID)
+    expect(plan.env.SC_NEW).toBe(NEW)
+    expect(JSON.parse(plan.env.SC_TAIL)).toEqual({ type: 'custom-title', customTitle: 'Before compact 2026-10-13 09:05', sessionId: NEW })
+    expect(backupTitle(AT)).toBe('Before compact 2026-10-13 09:05')
+  })
+
+  test('uses PowerShell for a Windows path', () => {
+    const plan = backupPlan(`C:\\Users\\a\\.claude\\projects\\x\\${ID}.jsonl`, ID, NEW, AT)
+    expect(plan.argv[0]).toBe('powershell')
+    expect(plan.out).toBe(`C:\\Users\\a\\.claude\\projects\\x\\${NEW}.jsonl`)
+  })
+
+  test('refuses an id that could break the copy', () => {
+    expect(() => backupPlan(`/p/${ID}.jsonl`, 'x/g;e', NEW, AT)).toThrow()
+    expect(() => backupPlan('/p/notes.txt', ID, NEW, AT)).toThrow()
+  })
+
+  test('backs up before the compact runs, and a failed copy does not stop it', async ($, on) => {
+    const runs: string[][] = []
+    const toasts: string[] = []
+    let exitCode = 0
+    on('process.run', (_$, e) => {
+      runs.push([...e.argv])
+      return { value: { exitCode, stdout: '', stderr: exitCode === 0 ? '' : 'disk full' } } as never
+    })
+    on('ui.toast', (_$, e) => {
+      toasts.push(e.text)
+      return { value: undefined } as never
+    })
+    on('clock.now', () => ({ value: AT.getTime() }) as never)
+    on('classic.PreCompact', () => ({}) as never)
+
+    await $.classic.PreCompact({ trigger: 'manual', custom_instructions: null, transcript_path: `/p/${ID}.jsonl`, session_id: ID })
+    expect(toasts).toEqual([])
+    expect(runs).toHaveLength(1)
+    expect(toasts).toHaveLength(0)
+
+    exitCode = 1
+    await $.classic.PreCompact({ trigger: 'auto', custom_instructions: null, transcript_path: `/p/${ID}.jsonl`, session_id: ID })
+    expect(runs).toHaveLength(2)
+    expect(toasts[0]).toContain('no backup this time (exit 1: disk full)')
   })
 })

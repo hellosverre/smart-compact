@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface as Engine, Register, ResolveInput, Timer } from 'claude-code'
 
 import type { Suggestion } from '../types'
+import { backupPlan } from './backup'
 import { boundaryOf, cacheWarningDelayMs, formatTokens } from './signals'
 import type { Boundary } from './signals'
 
@@ -88,11 +89,22 @@ function offer($: Engine, e: ResolveInput, current: Suggestion) {
   )
 }
 
+// A copy of the transcript as its own session before the compact replaces it.
+// A failed copy is said out loud and the compact goes ahead: the old lines stay on disk.
+async function backUp($: Engine, transcript: string, sessionId: string) {
+  const plan = backupPlan(transcript, sessionId, crypto.randomUUID(), new Date(await $.clock.now()))
+  const ran = await $.process.run(plan.argv, { env: plan.env, timeoutMs: 60_000 })
+  if (ran.exitCode !== 0) {
+    throw new Error(`exit ${ran.exitCode}: ${ran.stderr.trim().slice(0, 200)}`)
+  }
+}
+
 export const register: Register = (on, options) => {
   const onRequest = options.onRequest === 'auto' ? 'auto' : 'ask'
   const minPercent = Number(options.minPercent ?? 40)
   const ttlMinutes = Number(options.cacheTtlMinutes ?? 5)
   const idleCompact = options.idleCompact === true
+  const backup = options.backup !== false
 
   // Per turn: what landed during it, and what Claude asked for.
   let boundary: Boundary | null = null
@@ -215,6 +227,16 @@ export const register: Register = (on, options) => {
 
     return done
   })
+
+  // Every compact, the person's /compact and auto-compact included, not only ours.
+  on('classic.PreCompact', async ($, e, next) => {
+    if (backup) {
+      await backUp($, e.transcript_path, e.session_id).catch((error: unknown) =>
+        $.ui.toast(`smart-compact: no backup this time (${error instanceof Error ? error.message : String(error)})`),
+      )
+    }
+    return next(e)
+  }).catch(($, e, next) => next(e))
 
   // Esc on the dialog means not now.
   on('ui.close', { id: DIALOG }, async ($, e, next) => {
