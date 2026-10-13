@@ -86,6 +86,12 @@ all of it.
 So a minute before the cache expires, smart-compact offers the compact. Turn on `idleCompact` and it does it
 for you while you are away.
 
+## Nothing is lost
+
+Before every compact (yours, auto-compact's or smart-compact's), the whole conversation is copied to a session
+of its own. Pick **Before compact &lt;time&gt;** in `/resume` to go back to it as it was. Claude Code clears old
+sessions after `cleanupPeriodDays` (30 by default), backups included.
+
 ## Settings
 
 In the plugin's options under `/plugin`:
@@ -96,14 +102,17 @@ In the plugin's options under `/plugin`:
 | `minPercent` | `40` | Context fill below which nothing is suggested and Claude's requests are turned down |
 | `cacheTtlMinutes` | `5` | Set `60` if your plan uses the 1-hour cache |
 | `idleCompact` | `false` | Compact on its own a minute before the cache expires, instead of only suggesting it |
+| `backup` | `true` | Before every compact, copy the full conversation to its own session |
 
 ## How it works
 
-A Claude Code mod in two files ([hooks/register.tsx](hooks/register.tsx), [hooks/signals.ts](hooks/signals.ts)):
+A Claude Code mod in three files ([hooks/register.tsx](hooks/register.tsx), [hooks/signals.ts](hooks/signals.ts), [hooks/backup.ts](hooks/backup.ts)):
 
 - `tool.call` on Bash and PowerShell watches for a commit or a green test run
 - `turn.complete` decides whether to suggest, compacts on an `auto` request, and starts the cache timer
 - `prompt.submit` cancels the timer and clears the offer
+- `classic.PreCompact` copies the transcript to a new session first ([hooks/backup.ts](hooks/backup.ts)), with
+  `sed` or PowerShell through `$.process.run`, since transcripts often pass the 4 MiB `$.fs` takes
 - `$.tool.register` adds `request_compact`, and `$.session.compact` runs the compaction with Claude's instructions;
   where that is not available (the desktop app's Code tab, the SDK) it queues your own `/compact <instructions>`
 - `$.ui.open` places the dialog, drawn by a `ui.render` hook on its `Pane`; a hook on `AbovePrompt` draws the band
