@@ -42,6 +42,12 @@
       "description": "5 for the API default, 60 if your plan uses the 1-hour cache.",
       "default": 5
     },
+    "suggestAfterWork": {
+      "type": "boolean",
+      "title": "Suggest after a commit or green tests",
+      "description": "On: offer to compact when a git commit lands or tests go green. Off: stay quiet then; the cache timer and Claude's own requests still work.",
+      "default": true
+    },
     "idleCompact": {
       "type": "boolean",
       "title": "Compact while idle, before the cache expires",

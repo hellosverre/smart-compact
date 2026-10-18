@@ -158,6 +158,36 @@ describe('smart timing', () => {
     expect(await ui.find({ key: 'compact' })).toBe(undefined)
   })
 
+  test('stays quiet after a commit or green tests when suggestAfterWork is off', { options: { suggestAfterWork: false } }, async ($, on) => {
+    world(on, 55)
+    await start($)
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m "feat: done"' } as never)
+    await $.tool.call({ tool: 'Bash', command: 'pnpm test' } as never)
+    await $.turn.complete(TURN)
+    const ui = await band($, 'terminal')
+    expect(await ui.find({ key: 'compact' })).toBe(undefined)
+  })
+
+  test('still warns before the cache expires when suggestAfterWork is off', { options: { suggestAfterWork: false } }, async ($, on) => {
+    const clock = mock.clock(on)
+    world(on, 60)
+    await start($)
+    await $.tool.call({ tool: 'Bash', command: 'git commit -m x' } as never)
+    await $.turn.complete(TURN)
+    await clock.advance(240_000)
+    const ui = await band($, 'terminal')
+    expect((await ui.find({ type: 'Text', text: /cache expires/ })) !== undefined).toBe(true)
+  })
+
+  test('still offers Claude\'s own request when suggestAfterWork is off', { options: { suggestAfterWork: false } }, async ($, on) => {
+    world(on, 70)
+    await start($)
+    await $.tool.call({ tool: TOOL, reason: 'shipped' } as never)
+    await $.turn.complete(TURN)
+    const ui = await band($, 'terminal')
+    expect((await ui.find({ type: 'Text', text: /Claude wants to compact/ })) !== undefined).toBe(true)
+  })
+
   test('warns before the prompt cache expires', async ($, on) => {
     const clock = mock.clock(on)
     world(on, 60)
