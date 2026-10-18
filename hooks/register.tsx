@@ -104,6 +104,7 @@ export const register: Register = (on, options) => {
   const minPercent = Number(options.minPercent ?? 40)
   const ttlMinutes = Number(options.cacheTtlMinutes ?? 5)
   const idleCompact = options.idleCompact === true
+  const suggestAfterWork = options.suggestAfterWork !== false
   const backup = options.backup !== false
 
   // Per turn: what landed during it, and what Claude asked for.
@@ -207,7 +208,7 @@ export const register: Register = (on, options) => {
 
     if (percent < minPercent) return done
 
-    if (landed) {
+    if (landed && suggestAfterWork) {
       await suggest($, { source: 'boundary', percent, reason: landed === 'committed' ? 'You just committed' : 'Tests just went green' })
     }
 

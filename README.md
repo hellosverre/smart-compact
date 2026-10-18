@@ -101,6 +101,7 @@ In the plugin's options under `/plugin`:
 | `onRequest` | `ask` | `ask`: offer it when Claude requests a compact. `auto`: compact as soon as the turn ends. |
 | `minPercent` | `40` | Context fill below which nothing is suggested and Claude's requests are turned down |
 | `cacheTtlMinutes` | `5` | Set `60` if your plan uses the 1-hour cache |
+| `suggestAfterWork` | `true` | Offer a compact when a `git commit` lands or tests go green. Set `false` to stay quiet then; the cache timer and `request_compact` still work |
 | `idleCompact` | `false` | Compact on its own a minute before the cache expires, instead of only suggesting it |
 | `backup` | `true` | Before every compact, copy the full conversation to its own session |
 
