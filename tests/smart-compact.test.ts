@@ -12,11 +12,12 @@ const TURN = { answer: 'done', durationMs: 1000, isAborted: false, turnId: 't1',
 
 // The world beneath the plugin: a context window at `percent`, a compaction
 // that records what it was told, and Bash calls that succeed.
-function world(on: On, percent: number, dialog = false, headless = false) {
+function world(on: On, percent: number | (() => number), dialog = false, headless = false) {
   const compactions: (string | undefined)[] = []
-  on('session.usage', () => ({
-    value: { startedAt: 0, context: { tokens: percent * 2000, window: 200_000, percent }, rateLimits: [] },
-  }) as never)
+  on('session.usage', () => {
+    const now = typeof percent === 'function' ? percent() : percent
+    return { value: { startedAt: 0, context: { tokens: now * 2000, window: 200_000, percent: now }, rateLimits: [] } } as never
+  })
   on('session.compact', (_$, e) => {
     if (headless) throw new Error('not available in a headless (-p / SDK) session yet')
     compactions.push(e.instructions)
@@ -218,6 +219,30 @@ describe('smart timing', () => {
     const ui = await band($, 'terminal')
     expect(await ui.find({ key: 'compact' })).toBe(undefined)
     expect(compactions).toEqual([])
+  })
+
+  test('a compact in between cancels the timer, so it does not compact twice', { options: { idleCompact: true, backup: false } }, async ($, on) => {
+    const clock = mock.clock(on)
+    const compactions = world(on, 60)
+    on('classic.PreCompact', () => ({}) as never)
+    await start($)
+    await $.turn.complete(TURN)
+    await $.classic.PreCompact({ trigger: 'manual', custom_instructions: null, transcript_path: '/p/t.jsonl', session_id: 's' })
+    await clock.advance(300_000)
+    expect(compactions).toEqual([])
+  })
+
+  test('the timer stays quiet when the context has shrunk below the threshold', { options: { idleCompact: true } }, async ($, on) => {
+    const clock = mock.clock(on)
+    let level = 60
+    const compactions = world(on, () => level)
+    await start($)
+    await $.turn.complete(TURN)
+    level = 5
+    await clock.advance(300_000)
+    const ui = await band($, 'terminal')
+    expect(compactions).toEqual([])
+    expect(await ui.find({ key: 'compact' })).toBe(undefined)
   })
 })
 
