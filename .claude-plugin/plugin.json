@@ -1,6 +1,6 @@
 {
   "name": "smart-compact",
-  "version": "0.3.0",
+  "version": "0.3.1",
   "description": "Compacts at the right moment: after a commit or green tests, a minute before the prompt cache expires, or when Claude asks for it with its own request_compact tool.",
   "author": {
     "name": "hellosverre",
