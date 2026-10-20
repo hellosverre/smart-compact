@@ -89,6 +89,22 @@ function offer($: Engine, e: ResolveInput, current: Suggestion) {
   )
 }
 
+// The cache timer's moment, judged on the context as it is then: a compact in
+// between leaves nothing worth compacting or warning about.
+async function cacheExpiring($: Engine, minPercent: number, idleCompact: boolean) {
+  const { percent, tokens } = await percentNow($)
+  if (percent < minPercent) return
+  if (idleCompact) {
+    await compact($)
+    return
+  }
+  await suggest($, {
+    source: 'cache',
+    percent,
+    reason: `Prompt cache expires in ~1 min, then ${formatTokens(tokens)} re-send at full price`,
+  })
+}
+
 // A copy of the transcript as its own session before the compact replaces it.
 // A failed copy is said out loud and the compact goes ahead: the old lines stay on disk.
 async function backUp($: Engine, transcript: string, sessionId: string) {
@@ -215,15 +231,7 @@ export const register: Register = (on, options) => {
     cacheTimer?.cancel()
     cacheTimer = $.clock.after(cacheWarningDelayMs(ttlMinutes), () => {
       cacheTimer = null
-      if (idleCompact) {
-        void compact($)
-        return
-      }
-      void suggest($, {
-        source: 'cache',
-        percent,
-        reason: `Prompt cache expires in ~1 min, then ${formatTokens(tokens)} re-send at full price`,
-      })
+      void cacheExpiring($, minPercent, idleCompact)
     })
 
     return done
@@ -231,6 +239,9 @@ export const register: Register = (on, options) => {
 
   // Every compact, the person's /compact and auto-compact included, not only ours.
   on('classic.PreCompact', async ($, e, next) => {
+    // The timer was for the context that is about to be replaced.
+    cacheTimer?.cancel()
+    cacheTimer = null
     if (backup) {
       await backUp($, e.transcript_path, e.session_id).catch((error: unknown) =>
         $.ui.toast(`smart-compact: no backup this time (${error instanceof Error ? error.message : String(error)})`),
