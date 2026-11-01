@@ -3,7 +3,7 @@ import type { Engine } from 'claude-code/testing'
 import type { On } from 'claude-code'
 
 import { backupPlan, backupTitle } from '../hooks/backup'
-import { boundaryOf, cacheWarningDelayMs, formatTokens } from '../hooks/signals'
+import { boundaryOf, cacheExpired, cacheWarningDelayMs, formatTokens } from '../hooks/signals'
 
 const TOOL = 'mcp__smart-compact__request_compact'
 const SURFACES = ['terminal', 'desktop'] as const
@@ -46,6 +46,21 @@ async function band($: Engine, surface: (typeof SURFACES)[number]) {
   return $.ui.mount({ plugin: 'smart-compact', surface, component: 'AbovePrompt', props: BAND })
 }
 
+// A clock the test runs by hand: its timers go off when `wakeAt` says so, and
+// whatever the time was meant to be, now is `wakeAt`. A machine that slept
+// through a timer's moment finds exactly that when it wakes.
+function sleepyClock(on: On) {
+  let wall = 0
+  const waiting: (() => void)[] = []
+  on('clock.now', () => ({ value: wall }) as never)
+  on('clock.after', () => new Promise((resolve) => waiting.push(() => resolve({ value: undefined } as never))) as never)
+  return async function wakeAt(ms: number) {
+    wall = ms
+    for (const go of waiting.splice(0)) go()
+    await new Promise((resolve) => setTimeout(resolve, 20))
+  }
+}
+
 describe('signals', () => {
   test('reads commits and green test runs as boundaries', () => {
     expect(boundaryOf('git commit -m "feat: x"', false)).toBe('committed')
@@ -54,6 +69,13 @@ describe('signals', () => {
     expect(boundaryOf('cargo test --all', false)).toBe('tests passed')
     expect(boundaryOf('pnpm test', true)).toBe(null)
     expect(boundaryOf('git status', false)).toBe(null)
+  })
+
+  test('knows the cache is gone once its whole lifetime has passed', () => {
+    expect(cacheExpired(59 * 60_000, 60)).toBe(false)
+    expect(cacheExpired(60 * 60_000, 60)).toBe(true)
+    expect(cacheExpired(4 * 60_000, 5)).toBe(false)
+    expect(cacheExpired(66 * 60_000, 60)).toBe(true)
   })
 
   test('warns a minute before the cache expires, never sooner than 30s', () => {
@@ -243,6 +265,34 @@ describe('smart timing', () => {
     const ui = await band($, 'terminal')
     expect(compactions).toEqual([])
     expect(await ui.find({ key: 'compact' })).toBe(undefined)
+  })
+
+  test('a timer that wakes after the cache expired does not compact', { options: { idleCompact: true, backup: false } }, async ($, on) => {
+    const wakeAt = sleepyClock(on)
+    const compactions = world(on, 60)
+    await start($)
+    await $.turn.complete(TURN)
+    await wakeAt(600_000)
+    expect(compactions).toEqual([])
+  })
+
+  test('a timer that wakes after the cache expired does not warn either', async ($, on) => {
+    const wakeAt = sleepyClock(on)
+    world(on, 60)
+    await start($)
+    await $.turn.complete(TURN)
+    await wakeAt(600_000)
+    const ui = await band($, 'terminal')
+    expect(await ui.find({ type: 'Text', text: /cache expires/ })).toBe(undefined)
+  })
+
+  test('a timer that wakes a little late still compacts while the cache is warm', { options: { idleCompact: true, backup: false } }, async ($, on) => {
+    const wakeAt = sleepyClock(on)
+    const compactions = world(on, 60)
+    await start($)
+    await $.turn.complete(TURN)
+    await wakeAt(280_000)
+    expect(compactions).toHaveLength(1)
   })
 })
 

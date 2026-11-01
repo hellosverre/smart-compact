@@ -84,7 +84,9 @@ not, re-sends every token at full price. At 150k tokens that is the difference b
 all of it.
 
 So a minute before the cache expires, smart-compact offers the compact. Turn on `idleCompact` and it does it
-for you while you are away.
+for you while you are away. If the machine slept through that minute, the cache is already gone when the
+timer wakes, and smart-compact does nothing: compacting then would read the whole context at full price for
+no one.
 
 ## Nothing is lost
 

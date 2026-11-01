@@ -3,7 +3,7 @@ import type { EngineInterface as Engine, Register, ResolveInput, Timer } from 'c
 
 import type { Suggestion } from '../types'
 import { backupPlan } from './backup'
-import { boundaryOf, cacheWarningDelayMs, formatTokens } from './signals'
+import { boundaryOf, cacheExpired, cacheWarningDelayMs, formatTokens } from './signals'
 import type { Boundary } from './signals'
 
 const TOOL = 'request_compact'
@@ -89,9 +89,11 @@ function offer($: Engine, e: ResolveInput, current: Suggestion) {
   )
 }
 
-// The cache timer's moment, judged on the context as it is then: a compact in
-// between leaves nothing worth compacting or warning about.
-async function cacheExpiring($: Engine, minPercent: number, idleCompact: boolean) {
+// The cache timer's moment, judged on the context and the cache as they are then:
+// a compact in between leaves nothing worth compacting or warning about, and a
+// timer that woke late (the machine slept) finds the cache already gone.
+async function cacheExpiring($: Engine, armedAt: number, ttlMinutes: number, minPercent: number, idleCompact: boolean) {
+  if (cacheExpired((await $.clock.now()) - armedAt, ttlMinutes)) return
   const { percent, tokens } = await percentNow($)
   if (percent < minPercent) return
   if (idleCompact) {
@@ -229,9 +231,10 @@ export const register: Register = (on, options) => {
     }
 
     cacheTimer?.cancel()
+    const armedAt = await $.clock.now()
     cacheTimer = $.clock.after(cacheWarningDelayMs(ttlMinutes), () => {
       cacheTimer = null
-      void cacheExpiring($, minPercent, idleCompact)
+      void cacheExpiring($, armedAt, ttlMinutes, minPercent, idleCompact)
     })
 
     return done

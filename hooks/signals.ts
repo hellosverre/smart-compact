@@ -21,6 +21,12 @@ export function cacheWarningDelayMs(ttlMinutes: number): number {
   return Math.max(30_000, ttlMs - 60_000)
 }
 
+// A timer that fires after the cache's whole lifetime (the machine slept through
+// its moment) finds the cache gone: acting then re-reads the context at full price.
+export function cacheExpired(elapsedMs: number, ttlMinutes: number): boolean {
+  return elapsedMs >= Math.max(1, ttlMinutes) * 60_000
+}
+
 export function formatTokens(tokens: number | undefined): string {
   if (tokens === undefined) return 'the whole context'
   return tokens >= 1000 ? `${Math.round(tokens / 1000)}k tokens` : `${tokens} tokens`
