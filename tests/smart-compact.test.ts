@@ -71,6 +71,29 @@ describe('signals', () => {
     expect(boundaryOf('git status', false)).toBe(null)
   })
 
+  test('keeps reading a commit or a test run that is chained with other commands', () => {
+    expect(boundaryOf('pytest && git commit -m x', false)).toBe('committed')
+    expect(boundaryOf('npm test', false)).toBe('tests passed')
+    expect(boundaryOf('git -C repo commit -m x', false)).toBe('committed')
+    expect(boundaryOf('cd app && pnpm test', false)).toBe('tests passed')
+    expect(boundaryOf('pytest -q && echo ok', false)).toBe('tests passed')
+  })
+
+  test('a test run whose exit code is hidden is no proof the tests passed', () => {
+    expect(boundaryOf('pytest -q | tail -20', false)).toBe(null)
+    expect(boundaryOf('pnpm test | Select-Object -Last 20', false)).toBe(null)
+    expect(boundaryOf('pytest -q ; echo done', false)).toBe(null)
+    expect(boundaryOf('pytest -q || true', false)).toBe(null)
+  })
+
+  test('naming a test runner or a commit is not running it', () => {
+    expect(boundaryOf('cat pytest.ini', false)).toBe(null)
+    expect(boundaryOf('code jest.config.js', false)).toBe(null)
+    expect(boundaryOf('grep -r vitest src', false)).toBe(null)
+    expect(boundaryOf('echo "git commit"', false)).toBe(null)
+    expect(boundaryOf('Select-String -Pattern pytest notes.md', false)).toBe(null)
+  })
+
   test('knows the cache is gone once its whole lifetime has passed', () => {
     expect(cacheExpired(59 * 60_000, 60)).toBe(false)
     expect(cacheExpired(60 * 60_000, 60)).toBe(true)

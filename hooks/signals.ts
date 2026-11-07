@@ -3,14 +3,18 @@
 
 const COMMIT = /\bgit\s+(-C\s+\S+\s+)?commit\b/
 const TESTS =
-  /\b(vitest|jest|pytest|mocha|playwright\s+test|cargo\s+(test|nextest)|go\s+test|dotnet\s+test|(npm|pnpm|yarn|bun)\s+(run\s+)?test)\b/
+  /\b(vitest|jest|pytest|mocha|playwright\s+test|cargo\s+(test|nextest)|go\s+test|dotnet\s+test|(npm|pnpm|yarn|bun)\s+(run\s+)?test)\b(?![.\w-])/
+// A command that only reads or prints: naming a runner or a commit is not running it.
+const READS = /^\s*(cat|grep|rg|head|tail|less|ls|echo|which|sed|awk|find|fd|Select-String|Get-Content|Write-Output)\b/i
+// After a pipe or a `;` the exit code is the last command's, not the tests'.
+const HIDES_EXIT = /[|;\n]/
 
 export type Boundary = 'committed' | 'tests passed'
 
 export function boundaryOf(command: string, isError: boolean): Boundary | null {
-  if (isError) return null
+  if (isError || READS.test(command)) return null
   if (COMMIT.test(command)) return 'committed'
-  if (TESTS.test(command)) return 'tests passed'
+  if (TESTS.test(command) && !HIDES_EXIT.test(command)) return 'tests passed'
   return null
 }
 
